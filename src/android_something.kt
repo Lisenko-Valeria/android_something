@@ -3,7 +3,7 @@ class Human {
     var surname: Char = 'A'
     var age: Int = -1
     var speed: Int = -1
-    var x = 0
+    var x = 10
     var y = 0
 
     constructor(_name: Char, _surname: Char, _age: Int, _speed: Int){
