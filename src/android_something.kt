@@ -1,4 +1,4 @@
-class Human {
+open class Human {
     var name: Char = 'A'
     var surname: Char = 'A'
     var age: Int = -1
