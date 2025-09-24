@@ -1,9 +1,9 @@
-open class Human {
+public open class Human {
     var name: Char = 'A'
     var surname: Char = 'A'
     var age: Int = -1
     var speed: Int = -1
-    var x = 10
+    var x = 0
     var y = 0
 
     constructor(_name: Char, _surname: Char, _age: Int, _speed: Int){
@@ -11,7 +11,8 @@ open class Human {
         surname = _surname
         age = _age
         speed = _speed
-        //print("we created one : $name ")
+        x = 0
+        y = 0
     }
 
     fun move(_toX: Int, _toY: Int){
