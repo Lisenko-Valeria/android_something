@@ -11,7 +11,7 @@ y = y + speed * random(-1, 1)
 Скорость: 1-4 клетки за шаг
 Направление: случайное (±1)
 
-2. Для водителей (Driver):
+3. Для водителей (Driver):
 if (random direction == 'x') 
     x = x + speed * random(-1, 1)
 else 
