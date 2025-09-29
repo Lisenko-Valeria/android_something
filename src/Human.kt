@@ -1,10 +1,10 @@
-public open class Human {
-    var name: Char = 'A'
-    var surname: Char = 'A'
-    var age: Int = -1
-    var speed: Int = -1
-    var x = 0
-    var y = 0
+open class Human: movable {
+    override var name: Char = 'A'
+    override var surname: Char = 'A'
+    override var age: Int = -1
+    override var speed: Int = -1
+    override var x = 0
+    override var y = 0
 
     constructor(_name: Char, _surname: Char, _age: Int, _speed: Int){
         name = _name
@@ -15,11 +15,11 @@ public open class Human {
         y = 0
     }
 
-    fun move(_toX: Int, _toY: Int){
+    override fun move(_toX: Int, _toY: Int){
         x += _toX
         y += _toY
     }
-    fun prr(){
+    override fun prr(){
         print("$name $surname speed:$speed x:$x y:$y\n")
     }
 }
