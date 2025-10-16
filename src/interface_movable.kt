@@ -1,6 +1,6 @@
 interface movable{
-    var name: Char
-    var surname: Char
+    var name: String
+    var surname: String
     var age: Int
     var speed: Int
     var x : Int

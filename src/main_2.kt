@@ -3,22 +3,27 @@ import kotlin.random.Random
 
 fun main() {
 
-    val people: Array<Human> = Array(4) { Human('A', 'A', 0, 0) }
 
-    for (i in 0..2) {
-        people[i] = Human(('A'..'Z').random(), ('A'..'Z').random(), (1..10).random(), (1..4).random())
-        people[i].x = 20
-        people[i].y = 20
+    val people: Array<Human?> = Array(4) { null }
+
+    val surnames = arrayOf("Иванов", "Петров", "Васильев", "Андреев")
+    val names = arrayOf("Иван", "Петр", "Василий", "Андрей")
+
+    for(i in 0..2){
+        people[i] = Human(names[i], surnames[i], (1..10).random(), (1..4).random())
+        people[i]!!.x = 20
+        people[i]!!.y = 20
     }
 
-    people[3] = Driver(('A'..'Z').random(), ('A'..'Z').random(), (1..10).random(), (1..4).random())
-    people[3].x = 20
-    people[3].y = 20
+
+    people[3] = Driver(names[3], surnames[3], (1..10).random(), (1..4).random())
+    people[3]!!.x = 20
+    people[3]!!.y = 20
 
     val plane = Array(40) { Array(40) { Array(4) { "" } } }
 
     for (i in 0..3) {
-        plane[20][20][i] = "${people[i].name} ${people[i].surname}"
+        plane[20][20][i] = "${people[i]!!.name} ${people[i]!!.surname}"
     }
 
     // Создаем и запускаем потоки для каждого человека
@@ -28,7 +33,7 @@ fun main() {
         val thread = Thread {
             val cur = people[i]
             for (j in 0..3) {
-                val tempx = cur.x
+                val tempx = cur!!.x
                 val tempy = cur.y
 
                 if (cur is Driver) {
@@ -43,7 +48,7 @@ fun main() {
                     plane[tempy][tempx][i] = ""
                     plane[cur.y][cur.x][i] = "${cur.name} ${cur.surname}"
                 }
-                println("${people[i].name} ${people[i].surname}: (${people[i].x}, ${people[i].y})")
+                println("${people[i]!!.name} ${people[i]!!.surname}: (${people[i]!!.x}, ${people[i]!!.y})")
             }
         }
         threads.add(thread)
@@ -59,7 +64,7 @@ fun main() {
     println("ИТОГОВОЕ ПОЛОЖЕНИЕ")
     for (i in 0..3) {
         val type = if (people[i] is Driver) "Водитель" else "Человек"
-        println("$type ${people[i].name} ${people[i].surname}: (${people[i].x}, ${people[i].y})")
+        println("$type ${people[i]!!.name} ${people[i]!!.surname}: (${people[i]!!.x}, ${people[i]!!.y})")
     }
     println()
 }

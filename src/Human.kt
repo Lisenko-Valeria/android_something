@@ -1,14 +1,12 @@
-open class Human: movable {
-    override var name: Char = 'A'
-    override var surname: Char = 'A'
+open class Human (addName: String, addSurname: String): movable {
+    override var name: String = addName
+    override var surname: String = addSurname
     override var age: Int = -1
     override var speed: Int = -1
     override var x = 0
     override var y = 0
 
-    constructor(_name: Char, _surname: Char, _age: Int, _speed: Int){
-        name = _name
-        surname = _surname
+    constructor(addName: String, addSurname: String, _age: Int, _speed: Int): this(addName, addSurname){
         age = _age
         speed = _speed
         x = 0
@@ -22,4 +20,6 @@ open class Human: movable {
     override fun prr(){
         print("$name $surname speed:$speed x:$x y:$y\n")
     }
+
+    //something
 }
