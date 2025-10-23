@@ -9,25 +9,24 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Главное меню"
-        android:textSize="24sp"
+        android:text="Player"
+        android:textSize="32sp"
+        android:textStyle="bold"
         android:layout_marginBottom="32dp" />
 
-    <Button
-        android:id="@+id/btnToCalculator"
+    <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Калькулятор"
+        android:text="Здесь будет медиа-плеер"
         android:textSize="18sp"
-        android:padding="16dp" />
+        android:layout_marginBottom="20dp" />
 
     <Button
-        android:id="@+id/btnToPlayer"
+        android:id="@+id/btnBackToMain"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Player"
-        android:textSize="18sp"
-        android:padding="16dp" />
-
+        android:text="Назад"
+        android:textSize="16sp"
+        android:padding="12dp" />
 
 </LinearLayout>
