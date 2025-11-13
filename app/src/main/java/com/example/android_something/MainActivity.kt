@@ -16,9 +16,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.btnToPlayer).setOnClickListener {
-            // Создаем Intent для класса MediaPlayerActivity - это MediaPlayerActivity.kt
             val PlayerIntent = Intent(this, MediaPlayerActivity::class.java)
             startActivity(PlayerIntent)
+        }
+
+        findViewById<Button>(R.id.btnToLocation).setOnClickListener {
+            val locationIntent = Intent(this, LocationActivity::class.java)
+            startActivity(locationIntent)
         }
     }
 }

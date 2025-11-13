@@ -25,7 +25,15 @@
         android:id="@+id/btnToPlayer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Player"
+        android:text="Музыкальный плеер"
+        android:textSize="18sp"
+        android:padding="16dp" />
+
+    <Button
+        android:id="@+id/btnToLocation"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Местоположение"
         android:textSize="18sp"
         android:padding="16dp" />
 

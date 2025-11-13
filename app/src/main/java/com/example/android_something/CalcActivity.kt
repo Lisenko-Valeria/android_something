@@ -13,7 +13,7 @@ class CalculatorActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_calk) // Новый layout для калькулятора
+        setContentView(R.layout.activity_calc)
 
         tvDisplay = findViewById(R.id.tvDisplay)
         setupNumberButtons()
