@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- Кнопка Назад сверху -->
+    <Button
+        android:id="@+id/btnBack"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Назад"
+        android:layout_marginBottom="16dp" />
+
+    <!-- Заголовок -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Информация о сетях"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:layout_marginBottom="16dp" />
+
+    <!-- Кнопка получения данных -->
+    <Button
+        android:id="@+id/btnGetNetworkInfo"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Получить данные сетей"
+        android:layout_marginBottom="16dp" />
+
+    <!-- Прокручиваемая область для текста -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="horizontal|vertical">
+
+            <TextView
+                android:id="@+id/tvNetworkInfo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Нажмите 'Получить данные сетей' для начала"
+                android:textSize="12sp"
+                android:fontFamily="monospace"
+                android:lineSpacingExtra="2dp"
+                android:padding="8dp"
+                android:background="@android:color/white"
+                android:textColor="@android:color/black" />
+
+        </HorizontalScrollView>
+
+    </ScrollView>
+
+</LinearLayout>

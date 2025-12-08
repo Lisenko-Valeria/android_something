@@ -24,5 +24,10 @@ class MainActivity : AppCompatActivity() {
             val locationIntent = Intent(this, LocationActivity::class.java)
             startActivity(locationIntent)
         }
+
+        findViewById<Button>(R.id.btnToTelephony).setOnClickListener {
+            val telephonyIntent = Intent(this, TelephonyActivity::class.java)
+            startActivity(telephonyIntent)
+        }
     }
 }
