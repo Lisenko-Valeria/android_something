@@ -49,4 +49,6 @@ dependencies {
     implementation("com.google.android.gms:play-services-location:21.0.1")
     implementation("com.google.android.gms:play-services-base:18.2.0")
 
+    implementation ("org.zeromq:jeromq:0.5.0")
+
 }

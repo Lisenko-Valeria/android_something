@@ -45,5 +45,13 @@
         android:textSize="18sp"
         android:padding="16dp" />
 
+    <Button
+        android:id="@+id/btnToSockets"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Сокеты"
+        android:textSize="18sp"
+        android:padding="16dp" />
+
 
 </LinearLayout>

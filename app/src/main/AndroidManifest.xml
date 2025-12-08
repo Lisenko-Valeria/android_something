@@ -18,6 +18,9 @@
     <!-- Для Android 12+ -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -48,6 +51,9 @@
 
         <activity
             android:name=".TelephonyActivity" />
+
+        <activity
+            android:name=".SocketsActivity" />
 
 
     </application>

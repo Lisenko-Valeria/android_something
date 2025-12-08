@@ -29,5 +29,10 @@ class MainActivity : AppCompatActivity() {
             val telephonyIntent = Intent(this, TelephonyActivity::class.java)
             startActivity(telephonyIntent)
         }
+
+        findViewById<Button>(R.id.btnToSockets).setOnClickListener {
+            val socketsIntent = Intent(this, TelephonyActivity::class.java)
+            startActivity(socketsIntent)
+        }
     }
 }
