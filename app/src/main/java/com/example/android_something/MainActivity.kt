@@ -31,7 +31,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.btnToSockets).setOnClickListener {
-            val socketsIntent = Intent(this, TelephonyActivity::class.java)
+            val socketsIntent = Intent(this, SocketsActivity::class.java)
             startActivity(socketsIntent)
         }
     }
