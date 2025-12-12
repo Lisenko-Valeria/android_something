@@ -1,40 +1,46 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp"
-    tools:context=".SocketsActivity">
+    android:padding="16dp">
 
-    <TextView
-        android:layout_width="match_parent"
+    <!-- Кнопка возврата -->
+    <Button
+        android:id="@+id/btnBack"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="ZMQ Communication"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        android:gravity="center"
+        android:text="Назад"
         android:layout_marginBottom="16dp"/>
 
+    <!-- IP сервера -->
     <TextView
-        android:id="@+id/tvSockets"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Готов к работе"
-        android:textSize="18sp"
-        android:gravity="center"
-        android:layout_marginBottom="16dp"/>
+        android:text="IP адрес сервера:"
+        android:textSize="16sp"
+        android:layout_marginBottom="8dp"/>
 
     <EditText
         android:id="@+id/etServerIp"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="IP адрес компьютера"
-        android:inputType="text"
-        android:layout_marginBottom="8dp"/>
+        android:hint="Введите IP"
+        android:inputType="phone"
+        android:layout_marginBottom="16dp"/>
 
+    <!-- Статистика -->
+    <TextView
+        android:id="@+id/tvSockets"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Готов к подключению"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="16dp"/>
+
+    <!-- Кнопки управления -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -42,35 +48,29 @@
         android:layout_marginBottom="16dp">
 
         <Button
-            android:id="@+id/btnStartInternal"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Внутренний тест"
-            android:layout_marginEnd="8dp"/>
-
-        <Button
             android:id="@+id/btnStartExternal"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Подключиться к ПК"
+            android:text="Подключиться"
+            android:layout_marginEnd="8dp"/>
+
+        <Button
+            android:id="@+id/btnStop"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Остановить"
             android:layout_marginStart="8dp"/>
 
     </LinearLayout>
 
-    <Button
-        android:id="@+id/btnStop"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Остановить все"
-        android:layout_marginBottom="16dp"/>
-
+    <!-- Лог -->
     <TextView
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Лог:"
-        android:textStyle="bold"
+        android:text="Лог соединения:"
+        android:textSize="16sp"
         android:layout_marginBottom="8dp"/>
 
     <ScrollView
@@ -78,16 +78,17 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:background="@android:color/white">
+        android:background="@android:color/white"
+        android:padding="8dp">
 
         <TextView
             android:id="@+id/tvLog"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text=""
+            android:textColor="@android:color/black"
             android:textSize="12sp"
-            android:padding="8dp"
-            android:background="@android:color/white"/>
+            android:typeface="monospace"/>
 
     </ScrollView>
 
