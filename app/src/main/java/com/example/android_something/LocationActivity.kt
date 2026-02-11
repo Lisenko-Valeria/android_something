@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.location.Location
+import android.net.Uri
 import android.os.Build
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
@@ -141,71 +142,35 @@ class LocationActivity : AppCompatActivity() {
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // Android 10+ - используем MediaStore (НЕ ТРЕБУЕТ РАЗРЕШЕНИЙ!)
-                val values = ContentValues().apply {
-                    put(MediaStore.MediaColumns.DISPLAY_NAME, "location_data.json")
-                    put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOCUMENTS + "/MyAppLocations")
+                // 1. Ищем или создаем файл
+                val collection = MediaStore.Files.getContentUri("external")
+                val selection = "${MediaStore.Files.FileColumns.DISPLAY_NAME} = ? AND ${MediaStore.Files.FileColumns.RELATIVE_PATH} = ?"
+                val selectionArgs = arrayOf("location_data.json", Environment.DIRECTORY_DOCUMENTS + "/")
+
+                val uri = contentResolver.query(collection, null, selection, selectionArgs, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID))
+                        Uri.withAppendedPath(collection, id.toString())
+                    } else {
+                        val values = ContentValues().apply {
+                            put(MediaStore.MediaColumns.DISPLAY_NAME, "location_data.json")
+                            put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOCUMENTS + "/")
+                        }
+                        contentResolver.insert(collection, values)
+                    }
                 }
 
-                val uri = contentResolver.insert(MediaStore.Files.getContentUri("external"), values)
-
+                // 2. Добавляем в конец файла (APPEND)
                 uri?.let {
-                    contentResolver.openOutputStream(it)?.use { outputStream ->
-                        // Проверяем, нужно ли добавить к существующему файлу
-                        val existingContent = try {
-                            contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
-                        } catch (e: Exception) {
-                            null
-                        }
-
-                        if (!existingContent.isNullOrEmpty()) {
-                            outputStream.write(existingContent.toByteArray())
-                        }
-
+                    contentResolver.openOutputStream(it, "wa")?.use { outputStream ->
                         outputStream.write("$locationData\n".toByteArray())
-
-                        Toast.makeText(
-                            this,
-                            "✅ Сохранено в Documents/MyAppLocations/\nВидно через USB и Device Explorer!",
-                            Toast.LENGTH_LONG
-                        ).show()
                     }
-                } ?: Toast.makeText(this, "Ошибка создания файла", Toast.LENGTH_SHORT).show()
-
-            } else {
-                // Android 9 и ниже - требуется разрешение WRITE_EXTERNAL_STORAGE
-                if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                    == PackageManager.PERMISSION_GRANTED) {
-
-                    val documentsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-                    val appDir = File(documentsDir, "MyAppLocations")
-                    if (!appDir.exists()) appDir.mkdirs()
-
-                    val file = File(appDir, "location_data.json")
-
-                    // Добавляем данные в конец файла
-                    val existingText = if (file.exists()) file.readText() else ""
-                    file.writeText(existingText + "$locationData\n")
-
-                    Toast.makeText(
-                        this,
-                        "✅ Сохранено в Documents/MyAppLocations/",
-                        Toast.LENGTH_LONG
-                    ).show()
-                } else {
-                    // Запрашиваем разрешение
-                    ActivityCompat.requestPermissions(
-                        this,
-                        arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
-                        1002
-                    )
+                    Toast.makeText(this, "✅ Сохранено в Documents/location_data.json", Toast.LENGTH_SHORT).show()
                 }
             }
-
         } catch (e: Exception) {
-            Toast.makeText(this, "Ошибка записи: ${e.message}", Toast.LENGTH_SHORT).show()
-            e.printStackTrace()
+            Toast.makeText(this, "Ошибка записи", Toast.LENGTH_SHORT).show()
         }
     }
     }

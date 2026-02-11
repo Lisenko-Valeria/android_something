@@ -3,6 +3,7 @@ package com.example.android_something
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -32,7 +33,7 @@ class SocketsActivity : AppCompatActivity() {
     private var clientThread: Thread? = null
 
     private val locationFilePath =
-        "/storage/emulated/0/Android/data/com.example.android_something/files/Documents/location_data.json"
+        "${Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)}/location_data.json"
 
     @SuppressLint("SetTextI18n")
     override fun onCreate(savedInstanceState: Bundle?) {
