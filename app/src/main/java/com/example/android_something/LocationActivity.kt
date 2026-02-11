@@ -1,8 +1,10 @@
 package com.example.android_something
 
 import android.Manifest
+import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.location.Location
+import android.os.Build
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Environment
@@ -25,6 +27,8 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.Priority
 import android.os.Looper
+import android.provider.MediaStore
+import org.json.JSONArray
 
 class LocationActivity : AppCompatActivity() {
 
@@ -33,6 +37,9 @@ class LocationActivity : AppCompatActivity() {
     private lateinit var tvLongitude: TextView
     private lateinit var tvAltitude: TextView
     private lateinit var tvTime: TextView
+
+    private var timeoutHandler: Handler? = null
+    private var timeoutRunnable: Runnable? = null
 
     private val LOCATION_PERMISSION_REQUEST_CODE = 1001
 
@@ -76,13 +83,22 @@ class LocationActivity : AppCompatActivity() {
             10000L
         ).build()
 
+        // Запускаем таймер на случай, если координаты не придут
+        timeoutRunnable = Runnable {
+            Toast.makeText(this, "Проверьте включен ли GPS", Toast.LENGTH_SHORT).show()
+        }
+        timeoutHandler = Handler(Looper.getMainLooper())
+        timeoutHandler?.postDelayed(timeoutRunnable!!, 15000)
+
         fusedLocationClient.requestLocationUpdates(
             locationRequest,
             object : LocationCallback() {
                 override fun onLocationResult(locationResult: LocationResult) {
-
                     val location = locationResult.lastLocation
                     if (location != null) {
+                        // Отменяем таймер, так как координаты получены
+                        timeoutHandler?.removeCallbacks(timeoutRunnable!!)
+
                         updateLocationUI(location)
                         saveLocationToFile(location)
                         Toast.makeText(this@LocationActivity, "Данные получены", Toast.LENGTH_SHORT).show()
@@ -93,12 +109,9 @@ class LocationActivity : AppCompatActivity() {
             },
             Looper.getMainLooper()
         ).addOnFailureListener { exception ->
+            timeoutHandler?.removeCallbacks(timeoutRunnable!!)
             Toast.makeText(this, "Ошибка: ${exception.message}", Toast.LENGTH_SHORT).show()
         }
-
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            Toast.makeText(this, "Проверьте включен ли GPS", Toast.LENGTH_SHORT).show()
-        }, 15000)
     }
 
     private fun updateLocationUI(location: Location) {
@@ -124,34 +137,75 @@ class LocationActivity : AppCompatActivity() {
                 put("latitude", location.latitude)
                 put("longitude", location.longitude)
                 put("altitude", altitude)
+                put("readable_time", currentTime)
             }
 
-            val docsDir = getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
-            val file = File(docsDir, "location_data.json")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Android 10+ - используем MediaStore (НЕ ТРЕБУЕТ РАЗРЕШЕНИЙ!)
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, "location_data.json")
+                    put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOCUMENTS + "/MyAppLocations")
+                }
 
-            FileOutputStream(file, true).use { outputStream ->
-                val jsonString = locationData.toString()
-                outputStream.write("$jsonString\n".toByteArray())
+                val uri = contentResolver.insert(MediaStore.Files.getContentUri("external"), values)
+
+                uri?.let {
+                    contentResolver.openOutputStream(it)?.use { outputStream ->
+                        // Проверяем, нужно ли добавить к существующему файлу
+                        val existingContent = try {
+                            contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
+                        } catch (e: Exception) {
+                            null
+                        }
+
+                        if (!existingContent.isNullOrEmpty()) {
+                            outputStream.write(existingContent.toByteArray())
+                        }
+
+                        outputStream.write("$locationData\n".toByteArray())
+
+                        Toast.makeText(
+                            this,
+                            "✅ Сохранено в Documents/MyAppLocations/\nВидно через USB и Device Explorer!",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                } ?: Toast.makeText(this, "Ошибка создания файла", Toast.LENGTH_SHORT).show()
+
+            } else {
+                // Android 9 и ниже - требуется разрешение WRITE_EXTERNAL_STORAGE
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    == PackageManager.PERMISSION_GRANTED) {
+
+                    val documentsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+                    val appDir = File(documentsDir, "MyAppLocations")
+                    if (!appDir.exists()) appDir.mkdirs()
+
+                    val file = File(appDir, "location_data.json")
+
+                    // Добавляем данные в конец файла
+                    val existingText = if (file.exists()) file.readText() else ""
+                    file.writeText(existingText + "$locationData\n")
+
+                    Toast.makeText(
+                        this,
+                        "✅ Сохранено в Documents/MyAppLocations/",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    // Запрашиваем разрешение
+                    ActivityCompat.requestPermissions(
+                        this,
+                        arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                        1002
+                    )
+                }
             }
 
         } catch (e: Exception) {
-            Toast.makeText(this, "Ошибка записи", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Ошибка записи: ${e.message}", Toast.LENGTH_SHORT).show()
+            e.printStackTrace()
         }
     }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-
-        if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                fetchLocation()
-            } else {
-                Toast.makeText(this, "Разрешение необходимо", Toast.LENGTH_SHORT).show()
-            }
-        }
     }
-}
