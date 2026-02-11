@@ -1,5 +1,6 @@
 package com.example.android_something
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
@@ -12,7 +13,6 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import org.json.JSONObject
 import org.zeromq.ZContext
 import org.zeromq.ZMQ
 import java.io.BufferedReader
@@ -34,6 +34,7 @@ class SocketsActivity : AppCompatActivity() {
     private val locationFilePath =
         "/storage/emulated/0/Android/data/com.example.android_something/files/Documents/location_data.json"
 
+    @SuppressLint("SetTextI18n")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_sockets)
@@ -53,7 +54,7 @@ class SocketsActivity : AppCompatActivity() {
 
         handler = Handler(Looper.getMainLooper())
 
-        etServerIp.setText("10.101.209.134")
+        etServerIp.setText("10.81.55.134")
 
         btnBack.setOnClickListener {
             stopAll()
@@ -95,7 +96,7 @@ class SocketsActivity : AppCompatActivity() {
         logMessage("=== Все соединения остановлены ===")
     }
 
-    private fun readLastLocationLineFromFine(): String? {
+    private fun readLastLocationLineFromFile(): String? {
         try {
             val file = File(locationFilePath)
 
@@ -130,57 +131,126 @@ class SocketsActivity : AppCompatActivity() {
         }
     }
 
+    private fun reconnect(socket: org.zeromq.ZMQ.Socket?, address: String): org.zeromq.ZMQ.Socket? {
+        try {
+            socket?.close()
+
+            val newContext = ZContext()
+            val newSocket = newContext.createSocket(ZMQ.REQ)
+
+            // Устанавливаем таймауты
+            newSocket.receiveTimeOut = 5000  // 5 секунд на получение ответа
+            newSocket.sendTimeOut = 5000     // 5 секунд на отправку
+
+            newSocket.connect(address)
+            logMessage("Переподключение к $address")
+
+            // Тестовый запрос для проверки соединения
+            newSocket.send("test".toByteArray(ZMQ.CHARSET), 0)
+            val reply = newSocket.recv(0)
+
+            if (reply != null) {
+                logMessage("Соединение восстановлено")
+                return newSocket
+            }
+
+        } catch (e: Exception) {
+            logMessage("Ошибка переподключения: ${e.message}")
+        }
+        return null
+    }
+
     fun startExternalClient(serverIp: String) {
-        val context = ZMQ.context(1)
-        val socket = ZContext().createSocket(org.zeromq.SocketType.REQ)
+        var context: ZContext? = null
+        var socket: org.zeromq.ZMQ.Socket? = null
+        var packetCounter = 1
+        var reconnectionAttempts = 0
+        val maxReconnectionAttempts = 10
 
         try {
-            val address = "tcp://$serverIp:1234"
-            socket.connect(address)
-            logMessage("[EXTERNAL CLIENT] Подключение к $address")
+            val address = "tcp://$serverIp:4789"
 
-            var packetCounter = 1
-
-            while (isRunning) {
+            while (isRunning && reconnectionAttempts < maxReconnectionAttempts) {
                 try {
-                    val lastLocation = readLastLocationLineFromFine()
+                    // Создаем новое соединение или переподключаемся
+                    if (socket == null) {
+                        context = ZContext()
+                        socket = context.createSocket(ZMQ.REQ)
+
+                        // Настраиваем таймауты
+                        socket?.receiveTimeOut = 5000
+                        socket?.sendTimeOut = 5000
+
+                        socket?.connect(address)
+                        logMessage("[EXTERNAL CLIENT] Подключение к $address")
+                    }
+
+                    val lastLocation = readLastLocationLineFromFile()
 
                     if (lastLocation != null) {
-                        val request = lastLocation
+                        // Отправляем данные
+                        val sent = socket?.send(lastLocation.toByteArray(ZMQ.CHARSET), 0)
+                        if (sent == true) {
+                            logMessage("[$packetCounter] Запрос отправлен на сервер")
+                        } else {
+                            logMessage("[$packetCounter] Ошибка отправки запроса")
+                            throw Exception("Send failed")
+                        }
 
-                        socket.send(request.toByteArray(ZMQ.CHARSET), 0)
-                        logMessage(" Отправлен ответ серверу с локацией")
+                        // Ждем ответ (важно для проверки соединения)
+                        val reply = socket?.recv(0)
+                        if (reply == null) {
+                            logMessage("[$packetCounter] Нет ответа от сервера")
+                            throw Exception("No response from server")
+                        }
 
-                        val reply = socket.recv(0)
                         val response = String(reply, ZMQ.CHARSET)
                         logMessage(" Ответ сервера: $response")
 
                         packetCounter++
+                        reconnectionAttempts = 0 // Сброс счетчика переподключений
+
                     } else {
                         logMessage("[EXTERNAL CLIENT] Не найдена последняя локация в файле")
                     }
 
                     Thread.sleep(10000)
 
-                } catch (e: InterruptedException) {
-                    break
                 } catch (e: Exception) {
-                    logMessage("[EXTERNAL CLIENT] Ошибка в цикле отправки: ${e.message}")
-                    Thread.sleep(5000)
+                    logMessage("[EXTERNAL CLIENT] Ошибка: ${e.message}")
+
+                    // Закрываем текущее соединение
+                    socket?.close()
+                    context?.close()
+                    socket = null
+                    context = null
+
+                    // Увеличиваем счетчик переподключений
+                    reconnectionAttempts++
+
+                    if (isRunning && reconnectionAttempts < maxReconnectionAttempts) {
+                        logMessage("Попытка переподключения #$reconnectionAttempts...")
+                        Thread.sleep(5000) // Ждем 5 секунд перед следующей попыткой
+                    } else if (reconnectionAttempts >= maxReconnectionAttempts) {
+                        logMessage("Достигнут максимум попыток переподключения. Остановка.")
+                        break
+                    }
                 }
             }
+
         } catch (e: Exception) {
             if (isRunning) {
                 logMessage("[EXTERNAL CLIENT] Критическая ошибка: ${e.message}")
                 logMessage("Убедитесь, что:")
                 logMessage("1. Компьютер и телефон в одной сети Wi-Fi")
-                logMessage("2. Python сервер запущен на компьютере")
+                logMessage("2. Сервер запущен на компьютере")
                 logMessage("3. Правильный IP адрес: $serverIp")
                 e.printStackTrace()
             }
         } finally {
-            socket.close()
-            context.close()
+            // Очистка ресурсов
+            socket?.close()
+            context?.close()
             isRunning = false
             logMessage("[EXTERNAL CLIENT] Отключен")
         }
