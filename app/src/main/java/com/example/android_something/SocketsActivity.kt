@@ -84,7 +84,7 @@ class SocketsActivity : AppCompatActivity() {
         if (isRunning) return
 
         isRunning = true
-        logMessage("=== Подключение к серверу ($serverIp) ===")
+        logMessage("Подключение к серверу $serverIp")
 
         clientThread = Thread {
             startExternalClient(serverIp)
@@ -94,7 +94,7 @@ class SocketsActivity : AppCompatActivity() {
     fun stopAll() {
         isRunning = false
         clientThread?.interrupt()
-        logMessage("=== Все соединения остановлены ===")
+        logMessage("Все соединения остановлены")
     }
 
     private fun readLastLocationLineFromFile(): String? {
@@ -102,7 +102,7 @@ class SocketsActivity : AppCompatActivity() {
             val file = File(locationFilePath)
 
             if (!file.exists()) {
-                logMessage("Файл локаций не найден: $locationFilePath")
+                logMessage("Location file not found : $locationFilePath")
                 return null
             }
 
@@ -119,46 +119,17 @@ class SocketsActivity : AppCompatActivity() {
             }
 
             if (lastLine == null) {
-                logMessage("Файл пустой или содержит только пустые строки")
+                logMessage("There is no locations in the file")
                 return null
             }
 
             return lastLine
 
         } catch (e: Exception) {
-            logMessage("Ошибка чтения файла локаций: ${e.message}")
+            logMessage("Reading error: ${e.message}")
             e.printStackTrace()
             return null
         }
-    }
-
-    private fun reconnect(socket: org.zeromq.ZMQ.Socket?, address: String): org.zeromq.ZMQ.Socket? {
-        try {
-            socket?.close()
-
-            val newContext = ZContext()
-            val newSocket = newContext.createSocket(ZMQ.REQ)
-
-            // Устанавливаем таймауты
-            newSocket.receiveTimeOut = 5000  // 5 секунд на получение ответа
-            newSocket.sendTimeOut = 5000     // 5 секунд на отправку
-
-            newSocket.connect(address)
-            logMessage("Переподключение к $address")
-
-            // Тестовый запрос для проверки соединения
-            newSocket.send("test".toByteArray(ZMQ.CHARSET), 0)
-            val reply = newSocket.recv(0)
-
-            if (reply != null) {
-                logMessage("Соединение восстановлено")
-                return newSocket
-            }
-
-        } catch (e: Exception) {
-            logMessage("Ошибка переподключения: ${e.message}")
-        }
-        return null
     }
 
     fun startExternalClient(serverIp: String) {
@@ -183,7 +154,6 @@ class SocketsActivity : AppCompatActivity() {
                         socket?.sendTimeOut = 5000
 
                         socket?.connect(address)
-                        logMessage("[EXTERNAL CLIENT] Подключение к $address")
                     }
 
                     val lastLocation = readLastLocationLineFromFile()
@@ -192,33 +162,36 @@ class SocketsActivity : AppCompatActivity() {
                         // Отправляем данные
                         val sent = socket?.send(lastLocation.toByteArray(ZMQ.CHARSET), 0)
                         if (sent == true) {
-                            logMessage("[$packetCounter] Запрос отправлен на сервер")
+                            logMessage("[$packetCounter] Локация отправлена на сервер")
                         } else {
-                            logMessage("[$packetCounter] Ошибка отправки запроса")
                             throw Exception("Send failed")
                         }
 
                         // Ждем ответ (важно для проверки соединения)
                         val reply = socket?.recv(0)
                         if (reply == null) {
-                            logMessage("[$packetCounter] Нет ответа от сервера")
                             throw Exception("No response from server")
                         }
 
                         val response = String(reply, ZMQ.CHARSET)
-                        logMessage(" Ответ сервера: $response")
+                        logMessage("Ответ сервера: $response")
 
                         packetCounter++
                         reconnectionAttempts = 0 // Сброс счетчика переподключений
 
                     } else {
-                        logMessage("[EXTERNAL CLIENT] Не найдена последняя локация в файле")
+
+                        logMessage("Cant find last location")
                     }
 
                     Thread.sleep(10000)
 
                 } catch (e: Exception) {
-                    logMessage("[EXTERNAL CLIENT] Ошибка: ${e.message}")
+                    if (!isRunning) {
+                        // Если остановлено пользователем - просто выходим без ошибки
+                        break
+                    }
+                    logMessage("error: ${e.message}")
 
                     // Закрываем текущее соединение
                     socket?.close()
@@ -230,7 +203,7 @@ class SocketsActivity : AppCompatActivity() {
                     reconnectionAttempts++
 
                     if (isRunning && reconnectionAttempts < maxReconnectionAttempts) {
-                        logMessage("Попытка переподключения #$reconnectionAttempts...")
+                        logMessage("Попытка переподключения $reconnectionAttempts...")
                         Thread.sleep(5000) // Ждем 5 секунд перед следующей попыткой
                     } else if (reconnectionAttempts >= maxReconnectionAttempts) {
                         logMessage("Достигнут максимум попыток переподключения. Остановка.")
@@ -241,11 +214,7 @@ class SocketsActivity : AppCompatActivity() {
 
         } catch (e: Exception) {
             if (isRunning) {
-                logMessage("[EXTERNAL CLIENT] Критическая ошибка: ${e.message}")
-                logMessage("Убедитесь, что:")
-                logMessage("1. Компьютер и телефон в одной сети Wi-Fi")
-                logMessage("2. Сервер запущен на компьютере")
-                logMessage("3. Правильный IP адрес: $serverIp")
+                logMessage("error ${e.message}")
                 e.printStackTrace()
             }
         } finally {
@@ -253,7 +222,7 @@ class SocketsActivity : AppCompatActivity() {
             socket?.close()
             context?.close()
             isRunning = false
-            logMessage("[EXTERNAL CLIENT] Отключен")
+            logMessage("Отключен от сервера")
         }
     }
 

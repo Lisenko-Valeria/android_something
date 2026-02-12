@@ -17,7 +17,6 @@ class TelephonyActivity : AppCompatActivity() {
 
     private lateinit var tvNetworkInfo: TextView
     private lateinit var telephonyManager: TelephonyManager
-
     private companion object {
         const val PHONE_PERMISSION_REQUEST_CODE = 1002
     }
@@ -35,10 +34,6 @@ class TelephonyActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnGetNetworkInfo).setOnClickListener {
             checkAllPermissions()
         }
-        showBasicInfo()
-    }
-
-    private fun showBasicInfo() {
         val stringBuilder = StringBuilder()
         stringBuilder.append("Нажмите 'Получить данные сетей'\n")
         tvNetworkInfo.text = stringBuilder.toString()

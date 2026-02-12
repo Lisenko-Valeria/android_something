@@ -17,8 +17,6 @@ import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import org.json.JSONObject
-import java.io.File
-import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -29,7 +27,8 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.Priority
 import android.os.Looper
 import android.provider.MediaStore
-import org.json.JSONArray
+import androidx.annotation.RequiresApi
+
 
 class LocationActivity : AppCompatActivity() {
 
@@ -37,6 +36,7 @@ class LocationActivity : AppCompatActivity() {
     private lateinit var tvLatitude: TextView
     private lateinit var tvLongitude: TextView
     private lateinit var tvAltitude: TextView
+    private lateinit var tvAccuracy: TextView
     private lateinit var tvTime: TextView
 
     private var timeoutHandler: Handler? = null
@@ -53,6 +53,7 @@ class LocationActivity : AppCompatActivity() {
         tvLatitude = findViewById(R.id.tvLatitude)
         tvLongitude = findViewById(R.id.tvLongitude)
         tvAltitude = findViewById(R.id.tvAltitude)
+        tvAccuracy = findViewById(R.id.tvAccuracy)
         tvTime = findViewById(R.id.tvTime)
 
         findViewById<Button>(R.id.btnBack).setOnClickListener { finish() }
@@ -94,10 +95,10 @@ class LocationActivity : AppCompatActivity() {
         fusedLocationClient.requestLocationUpdates(
             locationRequest,
             object : LocationCallback() {
+                @RequiresApi(Build.VERSION_CODES.Q)
                 override fun onLocationResult(locationResult: LocationResult) {
                     val location = locationResult.lastLocation
                     if (location != null) {
-                        // Отменяем таймер, так как координаты получены
                         timeoutHandler?.removeCallbacks(timeoutRunnable!!)
 
                         updateLocationUI(location)
@@ -124,9 +125,11 @@ class LocationActivity : AppCompatActivity() {
         tvLatitude.text = "Широта: ${"%.6f".format(location.latitude)}"
         tvLongitude.text = "Долгота: ${"%.6f".format(location.longitude)}"
         tvAltitude.text = "Высота: ${"%.2f".format(altitude)}"
+        tvAccuracy.text = "Точность: ${"%.2f".format(location.accuracy)}"
         tvTime.text = "Время: $currentTime"
     }
 
+    @RequiresApi(Build.VERSION_CODES.Q) //Mediastore
     private fun saveLocationToFile(location: Location) {
         try {
             val timeFormat = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault())
@@ -138,37 +141,38 @@ class LocationActivity : AppCompatActivity() {
                 put("latitude", location.latitude)
                 put("longitude", location.longitude)
                 put("altitude", altitude)
-                put("readable_time", currentTime)
+                put("accuracy", 0 )
+                put("time_of_getting_location", currentTime)
+
             }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // 1. Ищем или создаем файл
-                val collection = MediaStore.Files.getContentUri("external")
-                val selection = "${MediaStore.Files.FileColumns.DISPLAY_NAME} = ? AND ${MediaStore.Files.FileColumns.RELATIVE_PATH} = ?"
-                val selectionArgs = arrayOf("location_data.json", Environment.DIRECTORY_DOCUMENTS + "/")
+            // 1. Ищем или создаем файл
+            val collection = MediaStore.Files.getContentUri("external")
+            val selection = "${MediaStore.Files.FileColumns.DISPLAY_NAME} = ? AND ${MediaStore.Files.FileColumns.RELATIVE_PATH} = ?"
+            val selectionArgs = arrayOf("location_data.json", Environment.DIRECTORY_DOCUMENTS + "/")
 
-                val uri = contentResolver.query(collection, null, selection, selectionArgs, null)?.use { cursor ->
-                    if (cursor.moveToFirst()) {
-                        val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID))
-                        Uri.withAppendedPath(collection, id.toString())
-                    } else {
-                        val values = ContentValues().apply {
-                            put(MediaStore.MediaColumns.DISPLAY_NAME, "location_data.json")
-                            put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
-                            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOCUMENTS + "/")
-                        }
-                        contentResolver.insert(collection, values)
+            val uri = contentResolver.query(collection, null, selection, selectionArgs, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID))
+                    Uri.withAppendedPath(collection, id.toString())
+                } else {
+                    val values = ContentValues().apply {
+                        put(MediaStore.MediaColumns.DISPLAY_NAME, "location_data.json")
+                        put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                        put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOCUMENTS + "/")
                     }
-                }
-
-                // 2. Добавляем в конец файла (APPEND)
-                uri?.let {
-                    contentResolver.openOutputStream(it, "wa")?.use { outputStream ->
-                        outputStream.write("$locationData\n".toByteArray())
-                    }
-                    Toast.makeText(this, "✅ Сохранено в Documents/location_data.json", Toast.LENGTH_SHORT).show()
+                    contentResolver.insert(collection, values)
                 }
             }
+
+            // 2. Добавляем в конец файла (APPEND)
+            uri?.let {
+                contentResolver.openOutputStream(it, "wa")?.use { outputStream ->
+                    outputStream.write("$locationData\n".toByteArray())
+                }
+                Toast.makeText(this, "Сохранено в Documents/location_data.json", Toast.LENGTH_SHORT).show()
+            }
+
         } catch (e: Exception) {
             Toast.makeText(this, "Ошибка записи", Toast.LENGTH_SHORT).show()
         }

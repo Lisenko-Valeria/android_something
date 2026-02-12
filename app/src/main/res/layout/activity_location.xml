@@ -44,6 +44,13 @@
         android:textSize="16sp" />
 
     <TextView
+        android:id="@+id/tvAccuracy"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Точность: -"
+        android:textSize="16sp" />
+
+    <TextView
         android:id="@+id/tvTime"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
