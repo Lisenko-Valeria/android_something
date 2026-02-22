@@ -55,6 +55,9 @@
         <activity
             android:name=".SocketsActivity" />
 
+        <activity
+            android:name=".CycleActivity" />
+
 
     </application>
 

@@ -53,5 +53,13 @@
         android:textSize="18sp"
         android:padding="16dp" />
 
+    <Button
+        android:id="@+id/btnToCycle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Цикл"
+        android:textSize="18sp"
+        android:padding="16dp" />
+
 
 </LinearLayout>

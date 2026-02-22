@@ -34,5 +34,10 @@ class MainActivity : AppCompatActivity() {
             val socketsIntent = Intent(this, SocketsActivity::class.java)
             startActivity(socketsIntent)
         }
+
+        findViewById<Button>(R.id.btnToCycle).setOnClickListener {
+            val socketsIntent = Intent(this, CycleActivity::class.java)
+            startActivity(socketsIntent)
+        }
     }
 }
