@@ -36,12 +36,15 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.zeromq.ZContext
 import org.zeromq.ZMQ
-import java.io.BufferedReader
-import java.io.File
-import java.io.FileReader
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+import android.content.Context
+import android.provider.Settings
+import androidx.annotation.RequiresPermission
+import androidx.appcompat.app.AlertDialog
+
 
 class CycleActivity : AppCompatActivity() {
     private val log_tag: String = "COMBINED_TRACKING"
@@ -63,7 +66,6 @@ class CycleActivity : AppCompatActivity() {
 
     // Location
     private lateinit var fusedLocationClient: FusedLocationProviderClient
-    private val LOCATION_PERMISSION_REQUEST_CODE = 1001
 
     // Telephony
     private lateinit var telephonyManager: TelephonyManager
@@ -81,6 +83,13 @@ class CycleActivity : AppCompatActivity() {
     // ZeroMQ
     private var zmqContext: ZContext? = null
     private var zmqSocket: ZMQ.Socket? = null
+
+    // Traffic stats
+    private lateinit var trafficStatsHelper: TrafficStatsHelper
+    private val TRAFFIC_PERMISSION_REQUEST_CODE = 1003
+    private var lastTrafficData: TrafficStatsData? = null
+    private lateinit var tvTotalTraffic: TextView
+    private lateinit var tvTopApps: TextView
 
     @RequiresApi(Build.VERSION_CODES.R)
     @SuppressLint("SetTextI18n")
@@ -102,9 +111,12 @@ class CycleActivity : AppCompatActivity() {
         // Initialize UI
         initViews()
 
+        // Initialize traffic stats helper
+        trafficStatsHelper = TrafficStatsHelper(this)
+
         // Set default values
         etServerIp.setText("10.122.153.134")
-        etInterval.setText("30") // Default 30 seconds
+        etInterval.setText("10") // Default 30 seconds
 
         // Set click listeners
         setClickListeners()
@@ -118,6 +130,8 @@ class CycleActivity : AppCompatActivity() {
         tvAccuracy = findViewById(R.id.tvAccuracy)
         tvLocationTime = findViewById(R.id.tvLocationTime)
         tvCellInfo = findViewById(R.id.tvCellInfo)
+        tvTotalTraffic = findViewById(R.id.tvTotalTraffic)
+        tvTopApps = findViewById(R.id.tvTopApps)
         tvLog = findViewById(R.id.tvLog)
         etServerIp = findViewById(R.id.etServerIp)
         etInterval = findViewById(R.id.etInterval)
@@ -163,6 +177,13 @@ class CycleActivity : AppCompatActivity() {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
                 permissionsNeeded.add(Manifest.permission.READ_PHONE_STATE)
             }
+        }
+
+        // Check for usage stats permission     last
+        if (!hasUsageStatsPermission()) {
+            // Не добавляем в список разрешений, а показываем диалог
+            requestUsageStatsPermission()
+            return
         }
 
         if (permissionsNeeded.isNotEmpty()) {
@@ -218,6 +239,7 @@ class CycleActivity : AppCompatActivity() {
         updateUIForTracking(true)
         logMessage("Запуск трекинга. Сервер: $serverIp, интервал: ${interval/1000} сек")
 
+        @SuppressLint("MissingPermission") //подавление
         trackingThread = Thread {
             runTrackingLoop(serverIp, interval)
         }.apply { start() }
@@ -261,6 +283,7 @@ class CycleActivity : AppCompatActivity() {
         }
     }
 
+    @RequiresPermission("android.permission.READ_PRIVILEGED_PHONE_STATE")
     @RequiresApi(Build.VERSION_CODES.R)
     private fun runTrackingLoop(serverIp: String, intervalMs: Long) {
         var packetCounter = 1
@@ -280,6 +303,8 @@ class CycleActivity : AppCompatActivity() {
                     updateLocationUI(location)
                 }
                 updateCellInfoUI(cellInfoJson)
+
+                updateTrafficUI()
 
                 // 4. Создаем объединенный JSON
                 val combinedData = createCombinedJson(location, cellInfoJson)
@@ -600,6 +625,7 @@ class CycleActivity : AppCompatActivity() {
 
 
 
+    @RequiresPermission("android.permission.READ_PRIVILEGED_PHONE_STATE")
     private fun createCombinedJson(location: Location?, cellInfo: JSONObject): JSONObject {
         val combined = JSONObject()
         val timestamp = System.currentTimeMillis()
@@ -626,6 +652,10 @@ class CycleActivity : AppCompatActivity() {
 
         // Cell info data
         combined.put("cell_info", cellInfo)
+
+        // Traffic stats data
+        val trafficJson = getTrafficStatsJson()
+        combined.put("traffic_stats", trafficJson)
 
         // Device info
         val deviceInfo = JSONObject()
@@ -716,6 +746,127 @@ class CycleActivity : AppCompatActivity() {
             }
 
             false
+        }
+    }
+
+    private fun hasUsageStatsPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            return true
+        }
+        val appOps = getSystemService(Context.APP_OPS_SERVICE) as android.app.AppOpsManager
+        val mode = appOps.checkOpNoThrow(
+            android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
+            android.os.Process.myUid(),
+            packageName
+        )
+        return mode == android.app.AppOpsManager.MODE_ALLOWED
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun requestUsageStatsPermission() {
+        AlertDialog.Builder(this)
+            .setTitle("Разрешение на доступ к статистике")
+            .setMessage("Для сбора информации о трафике приложений необходимо предоставить разрешение на доступ к статистике использования. Вы будете перенаправлены в настройки.")
+            .setPositiveButton("OK") { _, _ ->
+                val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                startActivityForResult(intent, TRAFFIC_PERMISSION_REQUEST_CODE)
+            }
+            .setNegativeButton("Отмена") { _, _ ->
+                Toast.makeText(this, "Без этого разрешения данные о трафике не будут собираться", Toast.LENGTH_LONG).show()
+                startTracking() // Продолжаем без трафика
+            }
+            .show()
+    }
+
+    // Добавьте обработку результата
+    @RequiresApi(Build.VERSION_CODES.R)
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == TRAFFIC_PERMISSION_REQUEST_CODE) {
+            // Проверяем, дал ли пользователь разрешение
+            if (trafficStatsHelper.hasUsageStatsPermission()) {
+                Toast.makeText(this, "Разрешение получено", Toast.LENGTH_SHORT).show()
+                checkAllPermissionsAndStart()
+            } else {
+                Toast.makeText(this, "Разрешение не получено", Toast.LENGTH_SHORT).show()
+                startTracking() // Продолжаем без трафика
+            }
+        }
+    }
+
+    @RequiresPermission("android.permission.READ_PRIVILEGED_PHONE_STATE")
+    private fun getTrafficStatsJson(): JSONObject {
+        val trafficJson = JSONObject()
+
+        try {
+            // Получаем статистику за последние 24 часа
+            val trafficData = trafficStatsHelper.getTrafficStats(24)
+            lastTrafficData = trafficData
+
+            trafficJson.put("total_rx_bytes", trafficData.totalRxBytes)
+            trafficJson.put("total_tx_bytes", trafficData.totalTxBytes)
+            trafficJson.put("total_rx_packets", trafficData.totalRxPackets)
+            trafficJson.put("total_tx_packets", trafficData.totalTxPackets)
+
+            // Получаем ТОП приложений по 2-сигма
+            val topAppsBySigma = trafficStatsHelper.getTopAppsByTwoSigma(trafficData)
+
+            val topAppsArray = JSONArray()
+            for (app in topAppsBySigma) {
+                val appJson = JSONObject()
+                appJson.put("uid", app.uid)
+                appJson.put("app_name", app.appName)
+                appJson.put("package_name", app.packageName)
+                appJson.put("rx_bytes", app.rxBytes)
+                appJson.put("tx_bytes", app.txBytes)
+                appJson.put("total_bytes", app.totalBytes)
+                appJson.put("percentage", "%.2f".format(app.percentage).toDouble())
+                topAppsArray.put(appJson)
+            }
+
+            trafficJson.put("top_apps", topAppsArray)
+            trafficJson.put("measurement_start_time", trafficData.measurementStartTime)
+            trafficJson.put("measurement_end_time", trafficData.measurementEndTime)
+
+        } catch (e: Exception) {
+            Log.e(log_tag, "Error getting traffic stats: ${e.message}")
+            trafficJson.put("error", e.message)
+        }
+
+        return trafficJson
+    }
+
+    private fun updateTrafficUI() {
+        handler.post {
+            lastTrafficData?.let { traffic ->
+                val totalBytes = traffic.totalRxBytes + traffic.totalTxBytes
+                val totalMB = totalBytes / (1024.0 * 1024.0)
+                val rxMB = traffic.totalRxBytes / (1024.0 * 1024.0)
+                val txMB = traffic.totalTxBytes / (1024.0 * 1024.0)
+
+                tvTotalTraffic.text = String.format(
+                    "Всего: %.2f MB (RX: %.2f MB, TX: %.2f MB)",
+                    totalMB, rxMB, txMB
+                )
+
+                if (traffic.topApps.isNotEmpty()) {
+                    val topAppsText = StringBuilder("ТОП приложения (2-сигма):\n")
+                    for (app in traffic.topApps.take(5)) {
+                        val appMB = app.totalBytes / (1024.0 * 1024.0)
+                        topAppsText.append(String.format(
+                            "  • %s: %.2f MB (%.1f%%)\n",
+                            app.appName, appMB, app.percentage
+                        ))
+                    }
+                    tvTopApps.text = topAppsText.toString()
+                } else {
+                    tvTopApps.text = "Нет данных о приложениях"
+                }
+            } ?: run {
+                tvTotalTraffic.text = "Всего передано: --"
+                tvTopApps.text = "ТОП приложения: --"
+            }
         }
     }
 

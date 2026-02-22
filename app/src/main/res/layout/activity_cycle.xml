@@ -160,6 +160,37 @@
                 android:textSize="12sp"
                 android:typeface="monospace" />
 
+            <!-- Добавьте после блока с информацией о сетях -->
+
+            <!-- Раздел информации о трафике -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📊 ТРАФИК ДАННЫХ:"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:background="#e0e0e0"
+                android:padding="4dp"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="8dp"
+                android:layout_gravity="center_horizontal"/>
+
+            <TextView
+                android:id="@+id/tvTotalTraffic"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Всего передано: --"
+                android:padding="4dp"/>
+
+            <TextView
+                android:id="@+id/tvTopApps"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="ТОП приложения: --"
+                android:padding="4dp"
+                android:maxLines="5"
+                android:ellipsize="end"/>
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
