@@ -14,7 +14,6 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.telephony.*
-import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -47,8 +46,6 @@ import androidx.appcompat.app.AlertDialog
 
 
 class CycleActivity : AppCompatActivity() {
-    private val log_tag: String = "COMBINED_TRACKING"
-
     // UI Elements
     private lateinit var tvStatus: TextView
     private lateinit var tvLatitude: TextView
@@ -115,8 +112,8 @@ class CycleActivity : AppCompatActivity() {
         trafficStatsHelper = TrafficStatsHelper(this)
 
         // Set default values
-        etServerIp.setText("10.122.153.134")
-        etInterval.setText("10") // Default 30 seconds
+        etServerIp.setText("10.111.70.134")
+        etInterval.setText("5") // Default 30 seconds
 
         // Set click listeners
         setClickListeners()
@@ -179,44 +176,22 @@ class CycleActivity : AppCompatActivity() {
             }
         }
 
-        // Check for usage stats permission     last
-        if (!hasUsageStatsPermission()) {
-            // Не добавляем в список разрешений, а показываем диалог
-            requestUsageStatsPermission()
-            return
-        }
-
         if (permissionsNeeded.isNotEmpty()) {
             ActivityCompat.requestPermissions(
                 this,
                 permissionsNeeded.toTypedArray(),
                 PHONE_PERMISSION_REQUEST_CODE // Using combined request code
             )
+        }
+        // Check for usage stats permission     last
+        if (!hasUsageDataAccess()) {
+            // Не добавляем в список разрешений, а показываем диалог
+            requestUsageDataAccess()
+            return
         } else {
             startTracking()
         }
-    }
 
-    @RequiresApi(Build.VERSION_CODES.R)
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-
-        val allGranted = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
-
-        if (allGranted) {
-            Toast.makeText(this, "Все разрешения предоставлены", Toast.LENGTH_SHORT).show()
-            startTracking()
-        } else {
-            Toast.makeText(this,
-                "Некоторые разрешения не предоставлены. Функциональность может быть ограничена.",
-                Toast.LENGTH_LONG).show()
-            // Still try to start with what we have
-            startTracking()
-        }
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
@@ -250,14 +225,12 @@ class CycleActivity : AppCompatActivity() {
         trackingThread?.interrupt()
 
         // Close ZMQ socket
-        try {
+
             zmqSocket?.close()
             zmqContext?.close()
             zmqSocket = null
             zmqContext = null
-        } catch (e: Exception) {
-            Log.e(log_tag, "Error closing ZMQ: ${e.message}")
-        }
+
 
         updateUIForTracking(false)
         logMessage("Трекинг остановлен")
@@ -291,7 +264,6 @@ class CycleActivity : AppCompatActivity() {
         val maxReconnectionAttempts = 10
 
         while (isTracking) {
-            try {
                 // 1. Получаем локацию
                 val location = getCurrentLocation()
 
@@ -303,7 +275,6 @@ class CycleActivity : AppCompatActivity() {
                     updateLocationUI(location)
                 }
                 updateCellInfoUI(cellInfoJson)
-
                 updateTrafficUI()
 
                 // 4. Создаем объединенный JSON
@@ -324,15 +295,6 @@ class CycleActivity : AppCompatActivity() {
 
                 // Ждем перед следующей итерацией
                 Thread.sleep(intervalMs)
-
-            } catch (e: Exception) {
-                if (!isTracking) break
-                logMessage("Ошибка в цикле трекинга: ${e.message}")
-                e.printStackTrace()
-
-                // Ждем перед повторной попыткой
-                Thread.sleep(5000)
-            }
         }
     }
 
@@ -389,11 +351,11 @@ class CycleActivity : AppCompatActivity() {
         return if (locationResult.isNotEmpty()) locationResult[0] else null
     }
 
+    @SuppressLint("SuspiciousIndentation")
     @RequiresApi(Build.VERSION_CODES.R)
     private fun getCellInfoJson(): JSONObject {
         val cellInfoJson = JSONObject()
 
-        try {
             // Check for permissions
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 cellInfoJson.put("error", "Missing location permission for cell info")
@@ -435,12 +397,6 @@ class CycleActivity : AppCompatActivity() {
             cellInfoJson.put("operator", telephonyManager.networkOperatorName ?: "Unknown")
             cellInfoJson.put("sim_operator", telephonyManager.simOperatorName ?: "Unknown")
             cellInfoJson.put("count", cellsArray.length())
-
-        } catch (e: SecurityException) {
-            cellInfoJson.put("error", "Security exception: ${e.message}")
-        } catch (e: Exception) {
-            cellInfoJson.put("error", "Error: ${e.message}")
-        }
 
         return cellInfoJson
     }
@@ -553,7 +509,7 @@ class CycleActivity : AppCompatActivity() {
 
     private fun updateCellInfoUI(cellInfoJson: JSONObject) {
         handler.post {
-            try {
+
                 val sb = StringBuilder()
 
                 // Основная информация об операторе
@@ -561,12 +517,6 @@ class CycleActivity : AppCompatActivity() {
                 sb.append("Оператор: ${cellInfoJson.optString("operator", "Неизвестно")}\n")
                 sb.append("SIM оператор: ${cellInfoJson.optString("sim_operator", "Неизвестно")}\n")
                 sb.append("Всего сот: ${cellInfoJson.optInt("count", 0)}\n")
-
-                // Проверка на ошибки
-                val error = cellInfoJson.optString("error", null)
-                if (error != null) {
-                    sb.append("\nОШИБКА: $error\n")
-                }
 
                 // Информация о сотах
                 val cells = cellInfoJson.optJSONArray("cells")
@@ -616,10 +566,7 @@ class CycleActivity : AppCompatActivity() {
 
                 tvCellInfo.text = sb.toString()
 
-            } catch (e: Exception) {
-                tvCellInfo.text = "Ошибка отображения данных сот: ${e.message}"
-                e.printStackTrace()
-            }
+
         }
     }
 
@@ -657,18 +604,11 @@ class CycleActivity : AppCompatActivity() {
         val trafficJson = getTrafficStatsJson()
         combined.put("traffic_stats", trafficJson)
 
-        // Device info
-        val deviceInfo = JSONObject()
-        deviceInfo.put("android_sdk", Build.VERSION.SDK_INT)
-        deviceInfo.put("device", Build.DEVICE)
-        deviceInfo.put("model", Build.MODEL)
-        combined.put("device", deviceInfo)
-
         return combined
     }
 
     private fun saveToFile(data: JSONObject) {
-        try {
+
             // Ищем или создаем файл через MediaStore
             val collection = MediaStore.Files.getContentUri("external")
             val selection = "${MediaStore.Files.FileColumns.DISPLAY_NAME} = ? AND ${MediaStore.Files.FileColumns.RELATIVE_PATH} = ?"
@@ -695,11 +635,6 @@ class CycleActivity : AppCompatActivity() {
                 }
                 logMessage("Данные сохранены в файл")
             }
-
-        } catch (e: Exception) {
-            logMessage("Ошибка сохранения в файл: ${e.message}")
-            e.printStackTrace()
-        }
     }
 
     private fun sendToServer(serverIp: String, data: String, packetNumber: Int): Boolean {
@@ -736,23 +671,18 @@ class CycleActivity : AppCompatActivity() {
             logMessage("Ошибка отправки на сервер: ${e.message}")
 
             // Закрываем поврежденное соединение
-            try {
+
                 zmqSocket?.close()
                 zmqContext?.close()
                 zmqSocket = null
                 zmqContext = null
-            } catch (closeError: Exception) {
-                // Игнорируем
-            }
+
 
             false
         }
     }
 
-    private fun hasUsageStatsPermission(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
-            return true
-        }
+    private fun hasUsageDataAccess(): Boolean {
         val appOps = getSystemService(Context.APP_OPS_SERVICE) as android.app.AppOpsManager
         val mode = appOps.checkOpNoThrow(
             android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
@@ -763,7 +693,7 @@ class CycleActivity : AppCompatActivity() {
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
-    private fun requestUsageStatsPermission() {
+    private fun requestUsageDataAccess() {   //переход в настройки
         AlertDialog.Builder(this)
             .setTitle("Разрешение на доступ к статистике")
             .setMessage("Для сбора информации о трафике приложений необходимо предоставить разрешение на доступ к статистике использования. Вы будете перенаправлены в настройки.")
@@ -784,14 +714,7 @@ class CycleActivity : AppCompatActivity() {
         super.onActivityResult(requestCode, resultCode, data)
 
         if (requestCode == TRAFFIC_PERMISSION_REQUEST_CODE) {
-            // Проверяем, дал ли пользователь разрешение
-            if (trafficStatsHelper.hasUsageStatsPermission()) {
-                Toast.makeText(this, "Разрешение получено", Toast.LENGTH_SHORT).show()
-                checkAllPermissionsAndStart()
-            } else {
-                Toast.makeText(this, "Разрешение не получено", Toast.LENGTH_SHORT).show()
-                startTracking() // Продолжаем без трафика
-            }
+            startTracking()
         }
     }
 
@@ -799,7 +722,6 @@ class CycleActivity : AppCompatActivity() {
     private fun getTrafficStatsJson(): JSONObject {
         val trafficJson = JSONObject()
 
-        try {
             // Получаем статистику за последние 24 часа
             val trafficData = trafficStatsHelper.getTrafficStats(24)
             lastTrafficData = trafficData
@@ -828,11 +750,6 @@ class CycleActivity : AppCompatActivity() {
             trafficJson.put("top_apps", topAppsArray)
             trafficJson.put("measurement_start_time", trafficData.measurementStartTime)
             trafficJson.put("measurement_end_time", trafficData.measurementEndTime)
-
-        } catch (e: Exception) {
-            Log.e(log_tag, "Error getting traffic stats: ${e.message}")
-            trafficJson.put("error", e.message)
-        }
 
         return trafficJson
     }
@@ -876,7 +793,6 @@ class CycleActivity : AppCompatActivity() {
 
         handler.post {
             tvLog.append(logMessage)
-            Log.d(log_tag, message)
 
             // Автоскролл
             val scrollView = findViewById<android.widget.ScrollView>(R.id.scrollViewLog)
