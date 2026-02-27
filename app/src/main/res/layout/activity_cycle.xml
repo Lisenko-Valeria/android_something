@@ -23,7 +23,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Комбинированный трекинг"
+                android:text="ЦИКЛ"
                 android:textSize="20sp"
                 android:textStyle="bold"
                 android:layout_marginBottom="16dp"/>
@@ -33,7 +33,6 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Статус: ОСТАНОВЛЕН"
-                android:textColor="@android:color/holo_red_dark"
                 android:textSize="16sp"
                 android:layout_marginBottom="16dp"/>
 
@@ -154,26 +153,15 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Нет данных"
-                android:padding="8dp"
-                android:background="#f0f0f0"
-                android:layout_marginBottom="16dp"
-                android:textSize="12sp"
-                android:typeface="monospace" />
+                android:background="#f0f0f0" />
 
-            <!-- Добавьте после блока с информацией о сетях -->
 
-            <!-- Раздел информации о трафике -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="📊 ТРАФИК ДАННЫХ:"
+                android:text="Трафик данных:"
                 android:textSize="16sp"
-                android:textStyle="bold"
-                android:background="#e0e0e0"
-                android:padding="4dp"
-                android:layout_marginTop="16dp"
-                android:layout_marginBottom="8dp"
-                android:layout_gravity="center_horizontal"/>
+                android:textStyle="bold"/>
 
             <TextView
                 android:id="@+id/tvTotalTraffic"

@@ -38,9 +38,6 @@ data class TrafficStatsData(
     val measurementEndTime: Long
 )
 
-/**
- * Внутренний класс для хранения трафика приложения
- */
 private data class AppTraffic(
     val uid: Int,
     var rxBytes: Long,
@@ -55,7 +52,6 @@ class TrafficStatsHelper(private val context: Context) {
     private val packageManager = context.packageManager
     private val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
 
-    // Проверяет наличие разрешения на доступ к статистике использования
     fun hasUsageDataAccess(): Boolean {
 
         val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as android.app.AppOpsManager
@@ -67,7 +63,6 @@ class TrafficStatsHelper(private val context: Context) {
         return mode == android.app.AppOpsManager.MODE_ALLOWED
     }
 
-     //Получает статистику трафика за последние N часов
     @RequiresPermission("android.permission.READ_PRIVILEGED_PHONE_STATE")
     fun getTrafficStats(hours: Int = 24): TrafficStatsData {
         val endTime = System.currentTimeMillis()
@@ -75,9 +70,6 @@ class TrafficStatsHelper(private val context: Context) {
         return getTrafficStats(startTime, endTime)
     }
 
-    /**
-     * Получает статистику трафика за указанный период
-     */
     @RequiresPermission("android.permission.READ_PRIVILEGED_PHONE_STATE")
     fun getTrafficStats(startTime: Long, endTime: Long): TrafficStatsData {
         val networkStatsMap = HashMap<Int, AppTraffic>()
@@ -86,14 +78,11 @@ class TrafficStatsHelper(private val context: Context) {
         var totalRxPackets = 0L
         var totalTxPackets = 0L
 
-        // Проверяем разрешение
         if (!hasUsageDataAccess()) {
             return createEmptyResult(startTime, endTime)
         }
-            // Получаем статистику для мобильной сети и WiFi
             val networkTypes = listOf(
                 ConnectivityManager.TYPE_MOBILE,
-                //ConnectivityManager.TYPE_WIFI
             )
 
             for (networkType in networkTypes) {
@@ -114,7 +103,6 @@ class TrafficStatsHelper(private val context: Context) {
                     }
             }
 
-            // Получаем информацию о приложениях
             val appTrafficList = buildAppTrafficList(networkStatsMap, totalRxBytes + totalTxBytes)
 
             return TrafficStatsData(
@@ -128,9 +116,6 @@ class TrafficStatsHelper(private val context: Context) {
             )
     }
 
-    /**
-     * Обрабатывает NetworkStats и возвращает сумму байт и пакетов
-     */
     private fun processNetworkStats(
         networkStats: NetworkStats?,
         networkStatsMap: HashMap<Int, AppTraffic>
@@ -154,7 +139,6 @@ class TrafficStatsHelper(private val context: Context) {
                     val bucketRxPackets = bucket.rxPackets
                     val bucketTxPackets = bucket.txPackets
 
-                    // Пропускаем системные UID (0-10000 обычно системные)
                     if (uid > 10000 && (bucketRxBytes > 0 || bucketTxBytes > 0)) {
                         val appTraffic = networkStatsMap.getOrPut(uid) {
                             AppTraffic(uid, 0L, 0L, 0L, 0L)
@@ -174,9 +158,6 @@ class TrafficStatsHelper(private val context: Context) {
         return NetworkTotals(rxBytes, txBytes, rxPackets, txPackets)
     }
 
-    /**
-     * Создает список информации о приложениях
-     */
     private fun buildAppTrafficList(
         networkStatsMap: HashMap<Int, AppTraffic>,
         totalBytes: Long
@@ -203,15 +184,9 @@ class TrafficStatsHelper(private val context: Context) {
             }
         }
 
-        // Сортируем по убыванию трафика
         return appTrafficList.sortedByDescending { it.totalBytes }
     }
-
-    /**
-     * Получает информацию о приложении по UID
-     */
     private fun getAppName(uid: Int): Pair<String, String> {
-            // Метод 1: Пытаемся получить пакеты через getPackagesForUid
             val packages = packageManager.getPackagesForUid(uid)
             if (packages != null && packages.isNotEmpty()) {
                 val packageName = packages[0]
@@ -235,9 +210,6 @@ class TrafficStatsHelper(private val context: Context) {
         }
     }
 
-    /**
-     * Создает пустой результат
-     */
     private fun createEmptyResult(startTime: Long, endTime: Long): TrafficStatsData {
         return TrafficStatsData(
             totalRxBytes = 0,
@@ -250,24 +222,18 @@ class TrafficStatsHelper(private val context: Context) {
         )
     }
 
-    /**
-     * Получает ТОП приложений по 2-сигма
-     */
     fun getTopAppsByTwoSigma(trafficData: TrafficStatsData): List<AppTrafficInfo> {
         if (trafficData.topApps.isEmpty()) return emptyList()
 
         val totalBytesList = trafficData.topApps.map { it.totalBytes.toDouble() }
 
-        // Вычисляем среднее и стандартное отклонение
         val mean = totalBytesList.average()
         val variance = totalBytesList.map { (it - mean) * (it - mean) }.average()
         val stdDev = Math.sqrt(variance)
 
-        // 2-сигма интервал: mean ± 2*stdDev
         val lowerBound = mean - 2 * stdDev
         val upperBound = mean + 2 * stdDev
 
-        // Возвращаем приложения в пределах 2-сигма
         return trafficData.topApps.filter {
             it.totalBytes.toDouble() >= lowerBound && it.totalBytes.toDouble() <= upperBound
         }

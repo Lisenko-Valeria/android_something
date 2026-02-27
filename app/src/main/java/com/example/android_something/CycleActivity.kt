@@ -63,6 +63,7 @@ class CycleActivity : AppCompatActivity() {
 
     // Location
     private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private var lastKnownLocation: Location? = null
 
     // Telephony
     private lateinit var telephonyManager: TelephonyManager
@@ -87,6 +88,7 @@ class CycleActivity : AppCompatActivity() {
     private var lastTrafficData: TrafficStatsData? = null
     private lateinit var tvTotalTraffic: TextView
     private lateinit var tvTopApps: TextView
+    private var lastFilteredTopApps: List<AppTrafficInfo>? = null
 
     @RequiresApi(Build.VERSION_CODES.R)
     @SuppressLint("SetTextI18n")
@@ -94,28 +96,22 @@ class CycleActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_cycle)
 
-        // Handle window insets
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
         }
 
-        // Initialize services
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
 
-        // Initialize UI
         initViews()
 
-        // Initialize traffic stats helper
         trafficStatsHelper = TrafficStatsHelper(this)
 
-        // Set default values
         etServerIp.setText("10.111.70.134")
-        etInterval.setText("5") // Default 30 seconds
+        etInterval.setText("5")
 
-        // Set click listeners
         setClickListeners()
     }
 
@@ -161,7 +157,6 @@ class CycleActivity : AppCompatActivity() {
     private fun checkAllPermissionsAndStart() {
         val permissionsNeeded = mutableListOf<String>()
 
-        // Location permissions
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             permissionsNeeded.add(Manifest.permission.ACCESS_FINE_LOCATION)
         }
@@ -169,7 +164,6 @@ class CycleActivity : AppCompatActivity() {
             permissionsNeeded.add(Manifest.permission.ACCESS_COARSE_LOCATION)
         }
 
-        // Phone state permission for telephony
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
                 permissionsNeeded.add(Manifest.permission.READ_PHONE_STATE)
@@ -180,18 +174,15 @@ class CycleActivity : AppCompatActivity() {
             ActivityCompat.requestPermissions(
                 this,
                 permissionsNeeded.toTypedArray(),
-                PHONE_PERMISSION_REQUEST_CODE // Using combined request code
+                PHONE_PERMISSION_REQUEST_CODE
             )
-        }
-        // Check for usage stats permission     last
+            return
+        }/*
         if (!hasUsageDataAccess()) {
-            // Не добавляем в список разрешений, а показываем диалог
             requestUsageDataAccess()
             return
-        } else {
-            startTracking()
-        }
-
+        }*/
+        startTracking()
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
@@ -205,16 +196,16 @@ class CycleActivity : AppCompatActivity() {
         }
 
         val interval = try {
-            intervalStr.toLong() * 1000 // Convert to milliseconds
+            intervalStr.toLong() * 1000
         } catch (e: Exception) {
-            30000L // Default 30 seconds
+            30000L
         }
 
         isTracking = true
         updateUIForTracking(true)
         logMessage("Запуск трекинга. Сервер: $serverIp, интервал: ${interval/1000} сек")
 
-        @SuppressLint("MissingPermission") //подавление
+        @SuppressLint("MissingPermission")
         trackingThread = Thread {
             runTrackingLoop(serverIp, interval)
         }.apply { start() }
@@ -224,12 +215,14 @@ class CycleActivity : AppCompatActivity() {
         isTracking = false
         trackingThread?.interrupt()
 
-        // Close ZMQ socket
-
+        try {
             zmqSocket?.close()
             zmqContext?.close()
+        } catch (e: Exception) {
+        } finally {
             zmqSocket = null
             zmqContext = null
+        }
 
 
         updateUIForTracking(false)
@@ -240,14 +233,12 @@ class CycleActivity : AppCompatActivity() {
         handler.post {
             if (tracking) {
                 tvStatus.text = "Статус: АКТИВЕН"
-                tvStatus.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
                 btnStart.isEnabled = false
                 btnStop.isEnabled = true
                 etServerIp.isEnabled = false
                 etInterval.isEnabled = false
             } else {
                 tvStatus.text = "Статус: ОСТАНОВЛЕН"
-                tvStatus.setTextColor(ContextCompat.getColor(this, android.R.color.holo_red_dark))
                 btnStart.isEnabled = true
                 btnStop.isEnabled = false
                 etServerIp.isEnabled = true
@@ -260,41 +251,66 @@ class CycleActivity : AppCompatActivity() {
     @RequiresApi(Build.VERSION_CODES.R)
     private fun runTrackingLoop(serverIp: String, intervalMs: Long) {
         var packetCounter = 1
-        var reconnectionAttempts = 0
         val maxReconnectionAttempts = 10
 
         while (isTracking) {
-                // 1. Получаем локацию
-                val location = getCurrentLocation()
-
-                // 2. Получаем данные о сетях
+            try {
+                val location = getCurrentLocation() ?: lastKnownLocation
                 val cellInfoJson = getCellInfoJson()
-
-                // 3. Обновляем UI
-                if (location != null) {
-                    updateLocationUI(location)
-                }
-                updateCellInfoUI(cellInfoJson)
-                updateTrafficUI()
-
-                // 4. Создаем объединенный JSON
                 val combinedData = createCombinedJson(location, cellInfoJson)
 
-                // 5. Сохраняем в файл
+                if (location != null) updateLocationUI(location)
+                updateCellInfoUI(cellInfoJson)
+                //updateTrafficUI()
+
                 saveToFile(combinedData)
 
-                // 6. Отправляем на сервер
-                val sent = sendToServer(serverIp, combinedData.toString(), packetCounter)
 
-                if (sent) {
-                    packetCounter++
-                    reconnectionAttempts = 0
-                } else {
-                    logMessage("Не удалось отправить данные на сервер")
+                var attempts = 0
+                var success = false
+                while (!success && attempts < maxReconnectionAttempts && isTracking) {
+                    try {
+                        val response = sendToServer(serverIp, combinedData.toString())
+                        if (response != null) {
+                            logMessage("[$packetCounter] Локация отправлена на сервер")
+                            logMessage("Ответ сервера: $response")
+                            packetCounter++
+                            success = true
+                        } else {
+                            attempts++
+                            logMessage("error: No response from server")
+                            if (attempts < maxReconnectionAttempts && isTracking) {
+                                logMessage("Попытка переподключения $attempts...")
+                                Thread.sleep(5000)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        if (!isTracking) break
+                        attempts++
+                        logMessage("error: ${e.message}")
+                        if (attempts < maxReconnectionAttempts && isTracking) {
+                            logMessage("Попытка переподключения $attempts...")
+                            Thread.sleep(5000)
+                        }
+                    }
                 }
 
-                // Ждем перед следующей итерацией
+                if (!success) {
+                    if (isTracking) {
+                        logMessage("Достигнут максимум попыток переподключения. Остановка.")
+                        handler.post { stopTracking() }
+                    }
+                    break
+                }
+
                 Thread.sleep(intervalMs)
+
+            } catch (e: Exception) {
+                if (!isTracking) break
+                logMessage("Ошибка в сборе данных: ${e.message}")
+                e.printStackTrace()
+                Thread.sleep(5000)
+            }
         }
     }
 
@@ -322,7 +338,6 @@ class CycleActivity : AppCompatActivity() {
             }
         }
 
-        // Запрашиваем локацию
         fusedLocationClient.requestLocationUpdates(
             locationRequest,
             locationCallback,
@@ -334,7 +349,6 @@ class CycleActivity : AppCompatActivity() {
             }
         }
 
-        // Ждем результат (максимум 15 секунд)
         synchronized(lock) {
             if (!isCompleted) {
                 try {
@@ -345,7 +359,6 @@ class CycleActivity : AppCompatActivity() {
             }
         }
 
-        // Удаляем колбэк
         fusedLocationClient.removeLocationUpdates(locationCallback)
 
         return if (locationResult.isNotEmpty()) locationResult[0] else null
@@ -356,7 +369,6 @@ class CycleActivity : AppCompatActivity() {
     private fun getCellInfoJson(): JSONObject {
         val cellInfoJson = JSONObject()
 
-            // Check for permissions
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 cellInfoJson.put("error", "Missing location permission for cell info")
                 return cellInfoJson
@@ -394,9 +406,6 @@ class CycleActivity : AppCompatActivity() {
             }
 
             cellInfoJson.put("cells", cellsArray)
-            cellInfoJson.put("operator", telephonyManager.networkOperatorName ?: "Unknown")
-            cellInfoJson.put("sim_operator", telephonyManager.simOperatorName ?: "Unknown")
-            cellInfoJson.put("count", cellsArray.length())
 
         return cellInfoJson
     }
@@ -470,7 +479,6 @@ class CycleActivity : AppCompatActivity() {
         val cellSignal = cellInfo.cellSignalStrength as CellSignalStrengthNr
 
         cellJson.put("type", "NR")
-        cellJson.put("registered", cellInfo.isRegistered)
 
         val identity = JSONObject()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -494,6 +502,7 @@ class CycleActivity : AppCompatActivity() {
     }
 
     private fun updateLocationUI(location: Location) {
+        lastKnownLocation = location
         val timeFormat = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault())
         val currentTime = timeFormat.format(Date())
         val altitude = if (location.altitude == 0.0) 120.0 else location.altitude
@@ -512,13 +521,6 @@ class CycleActivity : AppCompatActivity() {
 
                 val sb = StringBuilder()
 
-                // Основная информация об операторе
-                sb.append("ОСНОВНАЯ ИНФОРМАЦИЯ\n")
-                sb.append("Оператор: ${cellInfoJson.optString("operator", "Неизвестно")}\n")
-                sb.append("SIM оператор: ${cellInfoJson.optString("sim_operator", "Неизвестно")}\n")
-                sb.append("Всего сот: ${cellInfoJson.optInt("count", 0)}\n")
-
-                // Информация о сотах
                 val cells = cellInfoJson.optJSONArray("cells")
                 if (cells != null && cells.length() > 0) {
                     sb.append("\n------ ИНФОРМАЦИЯ О СОТАХ ------\n")
@@ -526,15 +528,10 @@ class CycleActivity : AppCompatActivity() {
                     for (i in 0 until cells.length()) {
                         val cell = cells.getJSONObject(i)
                         sb.append("------- СОТА ${i + 1}: -------\n")
-
                         val type = cell.optString("type", "Неизвестно")
                         sb.append("Тип: $type")
-                        if (cell.optBoolean("registered", false)) {
-                            sb.append(" (ЗАРЕГИСТРИРОВАНА)")
-                        }
-                        sb.append("\n")
 
-                        // Identity информация
+
                         val identity = cell.optJSONObject("identity")
                         if (identity != null) {
                             sb.append("\n--- Идентификация ---\n")
@@ -546,7 +543,6 @@ class CycleActivity : AppCompatActivity() {
                             }
                         }
 
-                        // Signal информация
                         val signal = cell.optJSONObject("signal")
                         if (signal != null) {
                             sb.append("\n--- Сигнал ---\n")
@@ -570,19 +566,14 @@ class CycleActivity : AppCompatActivity() {
         }
     }
 
-
-
     @RequiresPermission("android.permission.READ_PRIVILEGED_PHONE_STATE")
     private fun createCombinedJson(location: Location?, cellInfo: JSONObject): JSONObject {
         val combined = JSONObject()
-        val timestamp = System.currentTimeMillis()
         val timeFormat = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault())
         val currentTime = timeFormat.format(Date())
 
-        combined.put("timestamp", timestamp)
         combined.put("readable_time", currentTime)
 
-        // Location data
         val locationJson = JSONObject()
         if (location != null) {
             val altitude = if (location.altitude == 0.0) 120.0 else location.altitude
@@ -591,26 +582,22 @@ class CycleActivity : AppCompatActivity() {
             locationJson.put("altitude", altitude)
             locationJson.put("accuracy", location.accuracy)
             locationJson.put("time", location.time)
-            locationJson.put("provider", location.provider ?: "unknown")
         } else {
             locationJson.put("error", "Location not available")
         }
         combined.put("location", locationJson)
 
-        // Cell info data
         combined.put("cell_info", cellInfo)
-
-        // Traffic stats data
+/*
         val trafficJson = getTrafficStatsJson()
         combined.put("traffic_stats", trafficJson)
-
+*/
         return combined
     }
 
     private fun saveToFile(data: JSONObject) {
 
-            // Ищем или создаем файл через MediaStore
-            val collection = MediaStore.Files.getContentUri("external")
+        val collection = MediaStore.Files.getContentUri("external")
             val selection = "${MediaStore.Files.FileColumns.DISPLAY_NAME} = ? AND ${MediaStore.Files.FileColumns.RELATIVE_PATH} = ?"
             val selectionArgs = arrayOf("combined_data.json", Environment.DIRECTORY_DOCUMENTS + "/")
 
@@ -628,20 +615,16 @@ class CycleActivity : AppCompatActivity() {
                 }
             }
 
-            // Добавляем в конец файла
             uri?.let {
                 contentResolver.openOutputStream(it, "wa")?.use { outputStream ->
                     outputStream.write("$data\n".toByteArray())
                 }
-                logMessage("Данные сохранены в файл")
             }
     }
 
-    private fun sendToServer(serverIp: String, data: String, packetNumber: Int): Boolean {
+    private fun sendToServer(serverIp: String, data: String): String? {
         return try {
             val address = "tcp://$serverIp:4789"
-
-            // Создаем сокет если нужно
             if (zmqSocket == null) {
                 zmqContext = ZContext()
                 zmqSocket = zmqContext?.createSocket(ZMQ.REQ)
@@ -650,38 +633,23 @@ class CycleActivity : AppCompatActivity() {
                 zmqSocket?.connect(address)
             }
 
-            // Отправляем данные
             val sent = zmqSocket?.send(data.toByteArray(ZMQ.CHARSET), 0)
-
             if (sent == true) {
-                // Ждем ответ
                 val reply = zmqSocket?.recv(0)
-                if (reply != null) {
-                    val response = String(reply, ZMQ.CHARSET)
-                    logMessage("[$packetNumber] Отправлено. Ответ: $response")
-                    true
-                } else {
-                    throw Exception("Нет ответа от сервера")
-                }
+                reply?.let { String(it, ZMQ.CHARSET) }
             } else {
-                throw Exception("Ошибка отправки")
+                null
             }
-
         } catch (e: Exception) {
-            logMessage("Ошибка отправки на сервер: ${e.message}")
-
-            // Закрываем поврежденное соединение
-
-                zmqSocket?.close()
-                zmqContext?.close()
-                zmqSocket = null
-                zmqContext = null
-
-
-            false
+            zmqSocket?.close()
+            zmqContext?.close()
+            zmqSocket = null
+            zmqContext = null
+            null
         }
     }
 
+/*
     private fun hasUsageDataAccess(): Boolean {
         val appOps = getSystemService(Context.APP_OPS_SERVICE) as android.app.AppOpsManager
         val mode = appOps.checkOpNoThrow(
@@ -693,7 +661,7 @@ class CycleActivity : AppCompatActivity() {
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
-    private fun requestUsageDataAccess() {   //переход в настройки
+    private fun requestUsageDataAccess() {
         AlertDialog.Builder(this)
             .setTitle("Разрешение на доступ к статистике")
             .setMessage("Для сбора информации о трафике приложений необходимо предоставить разрешение на доступ к статистике использования. Вы будете перенаправлены в настройки.")
@@ -703,12 +671,11 @@ class CycleActivity : AppCompatActivity() {
             }
             .setNegativeButton("Отмена") { _, _ ->
                 Toast.makeText(this, "Без этого разрешения данные о трафике не будут собираться", Toast.LENGTH_LONG).show()
-                startTracking() // Продолжаем без трафика
+                startTracking()
             }
             .show()
     }
 
-    // Добавьте обработку результата
     @RequiresApi(Build.VERSION_CODES.R)
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -722,7 +689,7 @@ class CycleActivity : AppCompatActivity() {
     private fun getTrafficStatsJson(): JSONObject {
         val trafficJson = JSONObject()
 
-            // Получаем статистику за последние 24 часа
+
             val trafficData = trafficStatsHelper.getTrafficStats(24)
             lastTrafficData = trafficData
 
@@ -731,45 +698,40 @@ class CycleActivity : AppCompatActivity() {
             trafficJson.put("total_rx_packets", trafficData.totalRxPackets)
             trafficJson.put("total_tx_packets", trafficData.totalTxPackets)
 
-            // Получаем ТОП приложений по 2-сигма
             val topAppsBySigma = trafficStatsHelper.getTopAppsByTwoSigma(trafficData)
+            lastFilteredTopApps = topAppsBySigma
+            val top5Apps = topAppsBySigma.take(3)
 
             val topAppsArray = JSONArray()
-            for (app in topAppsBySigma) {
+            for (app in top5Apps) {
                 val appJson = JSONObject()
-                appJson.put("uid", app.uid)
                 appJson.put("app_name", app.appName)
-                appJson.put("package_name", app.packageName)
-                appJson.put("rx_bytes", app.rxBytes)
-                appJson.put("tx_bytes", app.txBytes)
                 appJson.put("total_bytes", app.totalBytes)
                 appJson.put("percentage", "%.2f".format(app.percentage).toDouble())
                 topAppsArray.put(appJson)
             }
 
             trafficJson.put("top_apps", topAppsArray)
-            trafficJson.put("measurement_start_time", trafficData.measurementStartTime)
-            trafficJson.put("measurement_end_time", trafficData.measurementEndTime)
 
         return trafficJson
     }
 
     private fun updateTrafficUI() {
         handler.post {
-            lastTrafficData?.let { traffic ->
-                val totalBytes = traffic.totalRxBytes + traffic.totalTxBytes
-                val totalMB = totalBytes / (1024.0 * 1024.0)
-                val rxMB = traffic.totalRxBytes / (1024.0 * 1024.0)
-                val txMB = traffic.totalTxBytes / (1024.0 * 1024.0)
+            lastFilteredTopApps?.let { apps ->
+                if (apps.isNotEmpty()) {
+                    val totalBytes = apps.sumOf { it.totalBytes } // если нужно общее, можно взять из lastTrafficData
+                    val totalMB = totalBytes / (1024.0 * 1024.0)
+                    val rxMB = (lastTrafficData?.totalRxBytes ?: 0) / (1024.0 * 1024.0)
+                    val txMB = (lastTrafficData?.totalTxBytes ?: 0) / (1024.0 * 1024.0)
 
-                tvTotalTraffic.text = String.format(
-                    "Всего: %.2f MB (RX: %.2f MB, TX: %.2f MB)",
-                    totalMB, rxMB, txMB
-                )
+                    tvTotalTraffic.text = String.format(
+                        "Всего: %.2f MB (RX: %.2f MB, TX: %.2f MB)",
+                        totalMB, rxMB, txMB
+                    )
 
-                if (traffic.topApps.isNotEmpty()) {
                     val topAppsText = StringBuilder("ТОП приложения (2-сигма):\n")
-                    for (app in traffic.topApps.take(5)) {
+                    for (app in apps.take(3)) {
                         val appMB = app.totalBytes / (1024.0 * 1024.0)
                         topAppsText.append(String.format(
                             "  • %s: %.2f MB (%.1f%%)\n",
@@ -786,7 +748,7 @@ class CycleActivity : AppCompatActivity() {
             }
         }
     }
-
+*/
     private fun logMessage(message: String) {
         val timeStamp = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
         val logMessage = "[$timeStamp] $message\n"
@@ -794,7 +756,6 @@ class CycleActivity : AppCompatActivity() {
         handler.post {
             tvLog.append(logMessage)
 
-            // Автоскролл
             val scrollView = findViewById<android.widget.ScrollView>(R.id.scrollViewLog)
             scrollView?.post {
                 scrollView.fullScroll(View.FOCUS_DOWN)
