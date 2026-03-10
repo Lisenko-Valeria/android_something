@@ -13,6 +13,10 @@
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" /> <!-- Для Android 12+ -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.INTERNET" /> <!-- Для доступа к статистике использования данных -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
@@ -31,8 +35,8 @@
         android:theme="@style/Theme.Android_something">
         <service
             android:name=".BackgroundService"
-            android:enabled="true"
-            android:exported="true"></service>
+            android:exported="false"
+            android:foregroundServiceType="location" />
 
         <activity
             android:name=".MainActivity"
@@ -49,7 +53,6 @@
         <activity android:name=".TelephonyActivity" />
         <activity android:name=".SocketsActivity" />
         <activity android:name=".CycleActivity" />
-        <service android:name=".BackgroundService" />
     </application>
 
 </manifest>

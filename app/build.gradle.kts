@@ -52,4 +52,9 @@ dependencies {
 
     implementation ("org.zeromq:jeromq:0.5.0")
 
+    implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
+
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+
 }
