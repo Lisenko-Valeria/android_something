@@ -12,7 +12,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.telephony.TelephonyManager
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -50,7 +49,6 @@ class CycleActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private val PHONE_PERMISSION_REQUEST_CODE = 1002
 
-    // Receiver for updates from service
     private val serviceReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
@@ -92,13 +90,11 @@ class CycleActivity : AppCompatActivity() {
 
         initViews()
 
-        // Default values
         etServerIp.setText("10.121.42.134")
         etInterval.setText("5")
 
         setClickListeners()
 
-        // Register receiver
         val filter = IntentFilter().apply {
             addAction(BackgroundService.ACTION_STATUS)
             addAction(BackgroundService.ACTION_LOCATION)
@@ -161,6 +157,12 @@ class CycleActivity : AppCompatActivity() {
             }
         }
 
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            permissionsNeeded.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        }
+
+
         if (permissionsNeeded.isNotEmpty()) {
             ActivityCompat.requestPermissions(
                 this,
@@ -184,7 +186,7 @@ class CycleActivity : AppCompatActivity() {
         val interval = try {
             intervalStr.toLong() * 1000
         } catch (e: Exception) {
-            30000L
+            5000L
         }
 
         val intent = Intent(this, BackgroundService::class.java).apply {
@@ -215,9 +217,7 @@ class CycleActivity : AppCompatActivity() {
     }
 
     private fun updateStatus(message: String) {
-        // Можно показывать в отдельном TextView, но у нас есть tvStatus для основного статуса
-        // Для простоты просто логируем
-        logMessage("[СТАТУС] $message")
+        logMessage("$message")
     }
 
     private fun updateLocationUI(location: Location) {
@@ -308,8 +308,6 @@ class CycleActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         LocalBroadcastManager.getInstance(this).unregisterReceiver(serviceReceiver)
-        // Не останавливаем сервис, чтобы он мог работать в фоне (по желанию можно остановить)
-        // Если нужно останавливать при выходе из активити, раскомментируйте:
         // stopTracking()
     }
 }

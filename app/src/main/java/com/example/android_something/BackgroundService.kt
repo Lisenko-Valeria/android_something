@@ -12,7 +12,6 @@ import android.os.Environment
 import android.os.IBinder
 import android.os.Looper
 import android.provider.MediaStore
-import android.telephony.CellIdentityLte
 import android.telephony.CellIdentityNr
 import android.telephony.CellInfoGsm
 import android.telephony.CellInfoLte
@@ -39,7 +38,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlinx.coroutines.tasks.await
 
 class BackgroundService : Service() {
 
@@ -54,18 +52,18 @@ class BackgroundService : Service() {
     // Telephony
     private lateinit var telephonyManager: TelephonyManager
 
-    // ZeroMQ - делаем изменяемыми и потокобезопасными
     @Volatile
     private var zmqContext: ZContext? = null
     @Volatile
     private var zmqSocket: ZMQ.Socket? = null
 
-    // Tracking state
     private val isTracking = AtomicBoolean(false)
     private var trackingJob: Job? = null
 
-    // Broadcast actions
     companion object {
+
+        const val NOTIFICATION_ID = 12345
+        const val CHANNEL_ID = "background_service_channel"
         const val ACTION_STATUS = "BG_SERVICE_STATUS"
         const val ACTION_LOCATION = "BG_SERVICE_LOCATION"
         const val ACTION_CELL_INFO = "BG_SERVICE_CELL_INFO"
@@ -80,6 +78,36 @@ class BackgroundService : Service() {
         Log.d(TAG, "Service created")
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
+
+        createNotificationChannel()
+
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(
+                CHANNEL_ID,
+                "Background Service Channel",
+                android.app.NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Channel for background service"
+            }
+            val notificationManager = getSystemService(android.app.NotificationManager::class.java)
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun createNotification(): android.app.Notification {
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            android.app.Notification.Builder(this, CHANNEL_ID)
+        } else {
+            android.app.Notification.Builder(this)
+        }
+        return builder
+            .setContentTitle("Сбор данных")
+            .setContentText("Идет сбор данных о местоположении и сотах")
+            .setPriority(android.app.Notification.PRIORITY_LOW)
+            .build()
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
@@ -101,9 +129,11 @@ class BackgroundService : Service() {
     private fun startTracking(serverIp: String, intervalMs: Long) {
         if (isTracking.getAndSet(true)) return
 
+        val notification = createNotification()
+        startForeground(NOTIFICATION_ID, notification)
+
         sendBroadcastStatus("Трекинг запущен. Сервер: $serverIp, интервал: ${intervalMs / 1000} сек")
 
-        // Отменяем предыдущую корутину если есть
         trackingJob?.cancel()
 
         trackingJob = serviceScope.launch {
@@ -117,9 +147,12 @@ class BackgroundService : Service() {
             } finally {
                 isTracking.set(false)
                 cleanupZmq()
+                stopForeground(true)
             }
         }
     }
+
+
 
     private fun stopTracking() {
         Log.d(TAG, "Stopping tracking")
@@ -128,6 +161,7 @@ class BackgroundService : Service() {
         trackingJob = null
         cleanupZmq()
         sendBroadcastStatus("Трекинг остановлен")
+        stopForeground(true)
     }
 
     private fun cleanupZmq() {
@@ -225,9 +259,8 @@ class BackgroundService : Service() {
             return null
         }
 
-        // Предотвращаем множественные одновременные запросы
         if (locationRequestInProgress.get()) {
-            sendBroadcastLog("Запрос локации уже выполняется, использую последнюю известную")
+            sendBroadcastLog("Запрос локации уже выполняется, использование последней известной")
             return lastSuccessfulLocation
         }
 
@@ -236,16 +269,15 @@ class BackgroundService : Service() {
             var location: Location? = null
 
             try {
-                sendBroadcastLog("🔍 Запрашиваю НОВУЮ локацию...")
+                sendBroadcastLog("Запрос новой локации")
 
                 val locationResult = CompletableDeferred<Location?>()
 
-                // Создаем запрос с высоким приоритетом
                 val locationRequest = LocationRequest.Builder(
                     Priority.PRIORITY_HIGH_ACCURACY,
-                    1000L // Минимальный интервал обновления
-                ).setMaxUpdates(1) // Только одно обновление
-                    .setDurationMillis(8000) // Максимальная длительность 8 секунд
+                    1000L
+                ).setMaxUpdates(1)
+                    .setDurationMillis(8000)
                     .setMinUpdateIntervalMillis(500)
                     .build()
 
@@ -253,40 +285,35 @@ class BackgroundService : Service() {
                     override fun onLocationResult(result: LocationResult) {
                         val newLocation = result.lastLocation
                         if (newLocation != null) {
-                            sendBroadcastLog("📍 Получена НОВАЯ локация: ${newLocation.latitude}, ${newLocation.longitude}")
+                            sendBroadcastLog("Получена новая локация: ${newLocation.latitude}, ${newLocation.longitude}")
                             locationResult.complete(newLocation)
                         }
                     }
                 }
 
                 try {
-                    // Запрашиваем обновление
                     fusedLocationClient.requestLocationUpdates(
                         locationRequest,
                         locationCallback,
                         Looper.getMainLooper()
                     ).addOnFailureListener { exception ->
-                        sendBroadcastLog("❌ Ошибка запроса локации: ${exception.message}")
+                        sendBroadcastLog("Ошибка запроса локации: ${exception.message}")
                         locationResult.completeExceptionally(exception)
                     }
 
-                    // Ждем новую локацию с таймаутом
                     location = withTimeoutOrNull(10000L) {
                         locationResult.await()
                     }
 
                     if (location != null) {
-                        // Сохраняем новую локацию
                         lastSuccessfulLocation = location
                         lastLocationTime = System.currentTimeMillis()
-                        sendBroadcastLog("✅ Новая локация сохранена")
                     } else {
-                        sendBroadcastLog("⚠️ Таймаут получения новой локации")
+                        sendBroadcastLog("⚠Таймаут получения новой локации")
 
-                        // Если не получили новую, но есть свежая (до 30 секунд)
                         if (lastSuccessfulLocation != null &&
                             System.currentTimeMillis() - lastLocationTime < 30000) {
-                            sendBroadcastLog("🔄 Использую свежую локацию от ${(System.currentTimeMillis() - lastLocationTime) / 1000} сек назад")
+                            sendBroadcastLog("Использвание локации от ${(System.currentTimeMillis() - lastLocationTime) / 1000} сек назад")
                             location = lastSuccessfulLocation
                         }
                     }
@@ -299,10 +326,9 @@ class BackgroundService : Service() {
                 Log.e(TAG, "Error getting location: ${e.message}")
                 e.printStackTrace()
 
-                // В случае ошибки не используем старую локацию, если она старая
                 if (lastSuccessfulLocation != null &&
                     System.currentTimeMillis() - lastLocationTime < 60000) { // 1 минута
-                    sendBroadcastLog("⚠️ Ошибка, использую недавнюю локацию")
+                    sendBroadcastLog("Ошибка, использование недавней локации")
                     location = lastSuccessfulLocation
                 }
             } finally {
@@ -310,17 +336,11 @@ class BackgroundService : Service() {
             }
 
             if (location == null) {
-                sendBroadcastLog("❌ Не удалось получить локацию")
+                sendBroadcastLog("Не удалось получить локацию")
             }
 
             location
         }
-    }
-
-    private fun isLocationRecent(location: Location): Boolean {
-        // Считаем локацию свежей, если ей меньше 2 минут
-        val age = System.currentTimeMillis() - location.time
-        return age < 2 * 60 * 1000
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
@@ -529,7 +549,6 @@ class BackgroundService : Service() {
             val address = "tcp://$serverIp:4789"
             Log.d(TAG, "Connecting to $address")
 
-            // Создаем новый контекст и сокет для каждой попытки
             localContext = ZContext()
             localSocket = localContext.createSocket(ZMQ.REQ)
             localSocket.receiveTimeOut = 5000
@@ -537,14 +556,12 @@ class BackgroundService : Service() {
 
             localSocket.connect(address)
 
-            // Отправляем данные
             val sent = localSocket.send(data.toByteArray(ZMQ.CHARSET), 0)
             if (!sent) {
                 Log.e(TAG, "Failed to send data")
                 return null
             }
 
-            // Получаем ответ
             val reply = localSocket.recv(0)
             if (reply == null) {
                 Log.e(TAG, "No response from server")
@@ -554,17 +571,13 @@ class BackgroundService : Service() {
             val response = String(reply, ZMQ.CHARSET)
             Log.d(TAG, "Received response: $response")
 
-            // Сохраняем сокет и контекст для последующего использования
             synchronized(this) {
-                // Закрываем старые если есть
                 try {
                     zmqSocket?.close()
                     zmqContext?.close()
                 } catch (e: Exception) {
-                    // Игнорируем
                 }
 
-                // Сохраняем новые
                 zmqSocket = localSocket
                 zmqContext = localContext
             }
@@ -575,19 +588,16 @@ class BackgroundService : Service() {
             Log.e(TAG, "Socket error: ${e.message}")
             e.printStackTrace()
 
-            // Закрываем временные ресурсы в случае ошибки
             try {
                 localSocket?.close()
                 localContext?.close()
             } catch (ex: Exception) {
-                // Игнорируем
             }
 
             return null
         }
     }
 
-    // Broadcast helpers
     private fun sendBroadcastStatus(message: String) {
         val intent = Intent(ACTION_STATUS).putExtra(EXTRA_MESSAGE, message)
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
